@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Framework.Compiler", "src\F
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Framework.Sample", "src\Framework.Sample\Framework.Sample.csproj", "{F3E0E1A3-3A3A-3A3A-3A3A-3A3A3A3A3A3A}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Framework.Tests", "src\Framework.Tests\Framework.Tests.csproj", "{F4E0E1A4-4A4A-4A4A-4A4A-4A4A4A4A4A4A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,5 +29,9 @@ Global
 		{F3E0E1A3-3A3A-3A3A-3A3A-3A3A3A3A3A3A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F3E0E1A3-3A3A-3A3A-3A3A-3A3A3A3A3A3A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F3E0E1A3-3A3A-3A3A-3A3A-3A3A3A3A3A3A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4E0E1A4-4A4A-4A4A-4A4A-4A4A4A4A4A4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4E0E1A4-4A4A-4A4A-4A4A-4A4A4A4A4A4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4E0E1A4-4A4A-4A4A-4A4A-4A4A4A4A4A4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4E0E1A4-4A4A-4A4A-4A4A-4A4A4A4A4A4A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
