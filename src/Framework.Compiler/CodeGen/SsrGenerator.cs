@@ -47,7 +47,7 @@ public class SsrGenerator
         sb.AppendLine();
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Text;");
-        sb.AppendLine("using RazorWings.Framework;");
+        sb.AppendLine("using RazorWings.Core;");
         sb.AppendLine();
     }
 

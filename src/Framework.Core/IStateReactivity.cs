@@ -1,4 +1,4 @@
-namespace RazorWings.Framework;
+namespace RazorWings.Core;
 
 /// <summary>
 /// Defines the contract for fine-grained state reactivity tracking.

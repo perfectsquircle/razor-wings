@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/Framework.Compiler/RazorWings.Compiler.csproj" />
+  <Project Path="src/Framework.Core/RazorWings.Core.csproj" />
+  <Project Path="src/Framework.Sample/RazorWings.Sample.csproj" />
+  <Project Path="src/Framework.Tests/RazorWings.Tests.csproj" />
+</Solution>

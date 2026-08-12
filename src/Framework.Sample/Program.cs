@@ -1,10 +1,7 @@
 // Uncomment to run validation before starting web server
-// var args = Environment.GetCommandLineArgs();
-// if (args.Contains("--validate"))
-// {
-//     PipelineValidator.ValidateCounterComponent();
-//     return;
-// }
+using RazorWings.Sample;
+
+PipelineValidator.ValidateCounterComponent();
 
 var builder = WebApplication.CreateBuilder(args);
 

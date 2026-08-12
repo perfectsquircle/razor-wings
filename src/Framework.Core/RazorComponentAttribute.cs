@@ -1,4 +1,4 @@
-namespace RazorWings.Framework;
+namespace RazorWings.Core;
 
 /// <summary>
 /// Marks a class as a Razor component that will be processed by the
