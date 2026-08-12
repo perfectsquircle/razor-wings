@@ -1,0 +1,35 @@
+# Build results
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+
+# IDE
+.vs/
+.vscode/
+*.csproj.user
+*.sln.user
+*.suo
+*.user
+*.userosscache
+*.ldf
+
+# Build Folders
+[Bb]in/
+[Oo]bj/
+
+# Generated files
+*.g.cs
+*.g.js
+
+# NuGet
+*.nupkg
+.nuget/
+
+# Rider
+.idea/
+*.sln.iml
+
+# macOS
+.DS_Store
