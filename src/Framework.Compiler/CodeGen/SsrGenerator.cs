@@ -116,7 +116,7 @@ public class SsrGenerator
         sb.AppendLine();
 
         // Parse markup and interpolate state variables
-        var markupLines = component.MarkupContent.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+        var markupLines = component.MarkupContent.Split(new[] { "\n" }, StringSplitOptions.None);
 
         foreach (var line in markupLines)
         {
