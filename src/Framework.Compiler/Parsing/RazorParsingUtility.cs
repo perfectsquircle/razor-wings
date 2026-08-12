@@ -85,7 +85,9 @@ public class RazorParsingUtility
     {
         try
         {
-            var tree = CSharpSyntaxTree.ParseText(codeBlock);
+            // Wrap code block in a temporary class for Roslyn parsing
+            var wrappedCode = $"class _Temp {{ {codeBlock} }}";
+            var tree = CSharpSyntaxTree.ParseText(wrappedCode);
             var root = tree.GetRoot() as CompilationUnitSyntax;
 
             if (root == null) return;
@@ -147,7 +149,9 @@ public class RazorParsingUtility
     {
         try
         {
-            var tree = CSharpSyntaxTree.ParseText(codeBlock);
+            // Wrap code block in a temporary class for Roslyn parsing
+            var wrappedCode = $"class _Temp {{ {codeBlock} }}";
+            var tree = CSharpSyntaxTree.ParseText(wrappedCode);
             var root = tree.GetRoot() as CompilationUnitSyntax;
 
             if (root == null) return;
@@ -199,22 +203,40 @@ public class RazorParsingUtility
         var assignments = body.DescendantNodes().OfType<AssignmentExpressionSyntax>();
 
         // Handle count++, count--
-        foreach (var op in postfixUnaryOps.Concat(prefixUnaryOps.Cast<ExpressionSyntax>()))
+        foreach (var postfixOp in postfixUnaryOps)
         {
-            var varName = op.ToString().TrimEnd('+', '-').Trim();
-            if (model.StateVariables.Any(s => s.Name == varName))
+            if (postfixOp.Operand is IdentifierNameSyntax id)
             {
-                handler.MutatedVariables.Add(varName);
+                var varName = id.Identifier.Text;
+                if (model.StateVariables.Any(s => s.Name == varName) && !handler.MutatedVariables.Contains(varName))
+                {
+                    handler.MutatedVariables.Add(varName);
+                }
+            }
+        }
+
+        foreach (var prefixOp in prefixUnaryOps)
+        {
+            if (prefixOp.Operand is IdentifierNameSyntax id)
+            {
+                var varName = id.Identifier.Text;
+                if (model.StateVariables.Any(s => s.Name == varName) && !handler.MutatedVariables.Contains(varName))
+                {
+                    handler.MutatedVariables.Add(varName);
+                }
             }
         }
 
         // Handle count = value, count += 1, etc.
         foreach (var assignment in assignments)
         {
-            var varName = assignment.Left.ToString().Trim();
-            if (model.StateVariables.Any(s => s.Name == varName))
+            if (assignment.Left is IdentifierNameSyntax id)
             {
-                handler.MutatedVariables.Add(varName);
+                var varName = id.Identifier.Text;
+                if (model.StateVariables.Any(s => s.Name == varName) && !handler.MutatedVariables.Contains(varName))
+                {
+                    handler.MutatedVariables.Add(varName);
+                }
             }
         }
     }
