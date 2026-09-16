@@ -125,7 +125,7 @@ public class SsrGenerator
 
             // Interpolate @variable references
             var interpolatedLine = InterpolateMarkupLine(line, component.StateVariables);
-            sb.AppendLine($"        html.Append(\"{EscapeString(interpolatedLine)}\");");
+            sb.AppendLine($"        html.Append($\"{EscapeString(interpolatedLine)}\");");
         }
 
         sb.AppendLine();

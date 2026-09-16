@@ -267,3 +267,24 @@ dotnet run --project src/Framework.Sample/Framework.Sample.csproj
 ---
 
 **Status**: ✓ Phase 1-7 Complete - Ready for Phase 2 enhancement work
+
+## Phase 8: End-to-End Sample Wiring ✓
+
+The interrupted implementation has now been completed:
+
+- `RazorComponentGenerator` discovers `.razor` files through Roslyn's
+  `AdditionalTextsProvider`, runs the parser, reaction graph, SSR generator, and JavaScript
+  emitter, and adds the generated renderer to the compilation.
+- Generated client scripts are written to `Framework.Sample/wwwroot/generated` during the build
+  (the Phase 1 PoC intentionally uses generator file I/O).
+- `Framework.Sample` consumes `Framework.Compiler` as an analyzer and exposes `ProjectDir` to the
+  generator.
+- The hand-written Counter output and validation helper were removed.
+- The sample now serves an index at `/` and a real SSR Counter page at `/counter`, including the
+  generated module script and static asset.
+- The Counter benchmark now correctly recognizes plain HTML event attributes such as
+  `onclick="@Increment"`, renders `Current count: 0` in SSR, and updates the `<p>` element after
+  the generated click handler runs.
+
+Validation: solution build succeeded, all 16 tests passed, and `/`, `/counter`, and
+`/generated/Counter.g.js` returned HTTP 200 from the running sample application.

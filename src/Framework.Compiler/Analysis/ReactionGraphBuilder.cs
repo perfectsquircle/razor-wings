@@ -63,14 +63,12 @@ public class ReactionGraphBuilder
             }
         }
 
-        // Process data bindings
-        foreach (var binding in component.Bindings.Where(b => b.Type == BindingType.DataBinding))
+        foreach (var stateVariable in component.StateVariables)
         {
-            if (graph.StateToSelectors.TryGetValue(binding.Expression, out var selectors))
+            if (component.StateToSelectorsMap.TryGetValue(stateVariable.Name, out var selectors) &&
+                graph.StateToSelectors.TryGetValue(stateVariable.Name, out var graphSelectors))
             {
-                // Generate a selector for this binding
-                var selector = GenerateSelector(binding);
-                selectors.Add(selector);
+                graphSelectors.UnionWith(selectors);
             }
         }
     }
@@ -167,12 +165,4 @@ public class ReactionGraphBuilder
         order.Add(stateVar);
     }
 
-    /// <summary>
-    /// Generates a CSS selector for a markup binding.
-    /// </summary>
-    private string GenerateSelector(MarkupBinding binding)
-    {
-        // Use a data attribute selector for uniqueness
-        return $"[data-bind-{binding.Expression}]";
-    }
 }

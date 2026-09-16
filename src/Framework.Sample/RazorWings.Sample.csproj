@@ -9,13 +9,14 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Framework.Core\RazorWings.Core.csproj" />
-		<ProjectReference Include="..\Framework.Compiler\RazorWings.Compiler.csproj" />
-		<!--OutputItemType="Analyzer" ReferenceOutputAssembly="false" />-->
+		<ProjectReference Include="..\Framework.Compiler\RazorWings.Compiler.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
-	<!-- Include .razor files as additional files for the source generator -->
 	<ItemGroup>
 		<AdditionalFiles Include="**/*.razor" />
+		<CompilerVisibleProperty Include="ProjectDir" />
 	</ItemGroup>
 
 </Project>

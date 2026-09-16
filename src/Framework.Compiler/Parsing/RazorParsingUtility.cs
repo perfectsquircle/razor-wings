@@ -267,13 +267,13 @@ public class RazorParsingUtility
         }
 
         // Extract @onclick="Increment" event bindings
-        var eventPattern = @"@(onclick|onchange|onsubmit|onkeyup)\s*=\s*[""']([^""']+)[""']";
+        var eventPattern = @"@?(onclick|onchange|onsubmit|onkeyup)\s*=\s*[""']([^""']+)[""']";
         var eventBindings = Regex.Matches(markup, eventPattern);
 
         foreach (Match match in eventBindings)
         {
             var eventName = match.Groups[1].Value;
-            var handlerName = match.Groups[2].Value.Trim();
+            var handlerName = match.Groups[2].Value.Trim().TrimStart('@');
 
             var binding = new MarkupBinding
             {
@@ -296,13 +296,12 @@ public class RazorParsingUtility
         {
             var selectors = new HashSet<string>();
 
-            // Find all bindings that use this variable
+            // Find all bindings that use this variable and infer the containing HTML element.
             foreach (var binding in model.Bindings)
             {
                 if (binding.Type == BindingType.DataBinding && binding.Expression == variable.Name)
                 {
-                    // Infer selector from markup context
-                    var selector = $"[data-bind-{variable.Name}]";
+                    var selector = InferElementSelector(model.MarkupContent, variable.Name);
                     selectors.Add(selector);
                 }
             }
@@ -312,6 +311,16 @@ public class RazorParsingUtility
                 model.StateToSelectorsMap[variable.Name] = selectors;
             }
         }
+    }
+
+    private string InferElementSelector(string markup, string variableName)
+    {
+        var match = Regex.Match(
+            markup,
+            $@"<(?<tag>[A-Za-z][\w-]*)\b[^>]*>[^<]*@{Regex.Escape(variableName)}\b",
+            RegexOptions.Singleline);
+
+        return match.Success ? match.Groups["tag"].Value : $"[data-bind-{variableName}]";
     }
 
     /// <summary>

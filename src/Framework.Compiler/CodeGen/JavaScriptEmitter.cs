@@ -93,32 +93,7 @@ public class JavaScriptEmitter
     /// </summary>
     private void GenerateDomQueries(StringBuilder sb, ComponentModel component)
     {
-        sb.AppendLine("  // Query DOM elements");
-
-        var selectors = new HashSet<string>();
-        foreach (var binding in component.Bindings)
-        {
-            if (binding.Type == BindingType.EventBinding)
-            {
-                var selector = $"[data-event-{binding.Expression}]";
-                selectors.Add(selector);
-            }
-        }
-
-        // Generic selectors for elements to update
-        foreach (var stateVar in component.StateVariables)
-        {
-            var selector = $"[data-bind-{stateVar.Name}]";
-            selectors.Add(selector);
-        }
-
-        var index = 1;
-        foreach (var selector in selectors.OrderBy(s => s))
-        {
-            var varName = $"el{index}";
-            sb.AppendLine($"  const {varName} = target.querySelector('{selector}');");
-            index++;
-        }
+        sb.AppendLine("  // DOM nodes are resolved in update and event handlers.");
     }
 
     /// <summary>
