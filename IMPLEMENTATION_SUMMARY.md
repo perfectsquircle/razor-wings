@@ -268,6 +268,19 @@ dotnet run --project src/Framework.Sample/Framework.Sample.csproj
 
 **Status**: ✓ Phase 1-7 Complete - Ready for Phase 2 enhancement work
 
+## Part 2 Implementation
+
+The compiler now includes the initial Part 2 supported subset:
+
+- Structured Razor nodes for nested elements, `@if`/`@else`, `@foreach`, component tags, expressions, parameters, and callbacks.
+- Roslyn-based C# expression translation covering literals, operators, interpolated strings, lambdas, member access, and common collection/string APIs.
+- Reaction-graph metadata for computed-property dependencies and structural expressions.
+- Recursive SSR generation for supported control-flow nodes.
+- Generated JavaScript anchors/templates for conditional and index-based loop reconciliation, expression-aware text updates, event handlers, and component `updateProps()` contracts.
+- Sample fixtures for toggles, todo lists, and parent/child props.
+
+Part 2 intentionally reports or limits unsupported syntax rather than attempting to execute arbitrary C# in the browser. Keyed list reconciliation, full Razor compatibility, async handlers, and general .NET API emulation remain future work.
+
 ## Phase 8: End-to-End Sample Wiring ✓
 
 The interrupted implementation has now been completed:

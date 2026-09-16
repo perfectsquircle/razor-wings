@@ -45,6 +45,15 @@ public class ComponentModel
     /// </summary>
     public List<MarkupBinding> Bindings { get; set; } = new();
 
+    /// <summary>Root nodes of the structured Razor markup tree.</summary>
+    public List<RazorMarkupNode> MarkupNodes { get; set; } = new();
+
+    /// <summary>Alias for consumers that call the tree the markup root.</summary>
+    public List<RazorMarkupNode> RootNodes => MarkupNodes;
+
+    public List<ComponentParameter> Parameters { get; set; } = new();
+    public List<ComponentEventCallback> EventCallbacks { get; set; } = new();
+
     /// <summary>
     /// Maps state variable names to the DOM selectors that depend on them.
     /// </summary>

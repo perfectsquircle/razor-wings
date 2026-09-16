@@ -1,0 +1,6 @@
+@code {
+    [Parameter] public int Count { get; set; }
+    [Parameter] public EventCallback OnIncrement { get; set; }
+}
+
+<button onclick="@OnIncrement">Child Count: @Count</button>

@@ -26,6 +26,12 @@ public class ReactionGraph
     /// </summary>
     public Dictionary<string, HashSet<string>> HandlerDependencies { get; set; } = new();
 
+    /// <summary>Maps computed state members to the state members they read.</summary>
+    public Dictionary<string, HashSet<string>> ComputedDependencies { get; set; } = new();
+
+    /// <summary>Expressions that require structural DOM reconciliation.</summary>
+    public Dictionary<string, string> StructuralDependencies { get; set; } = new();
+
     /// <summary>
     /// Topologically sorted list of state variables for update order.
     /// </summary>

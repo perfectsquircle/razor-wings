@@ -1,0 +1,5 @@
+@code {
+    private int parentCount = 0;
+}
+
+<Child Count="@parentCount" OnIncrement="@(() => parentCount++)" />

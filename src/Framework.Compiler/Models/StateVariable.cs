@@ -29,4 +29,13 @@ public class StateVariable
     /// Line number in the source Razor file where this variable is declared.
     /// </summary>
     public int LineNumber { get; set; }
+
+    /// <summary>Whether this member is a computed property rather than mutable storage.</summary>
+    public bool IsComputed { get; set; }
+
+    /// <summary>The expression used by a computed property, when available.</summary>
+    public string? ComputedExpression { get; set; }
+
+    /// <summary>State members referenced by the computed expression.</summary>
+    public HashSet<string> Dependencies { get; set; } = new();
 }

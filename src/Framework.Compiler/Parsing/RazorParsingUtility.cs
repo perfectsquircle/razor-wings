@@ -1,348 +1,381 @@
 namespace RazorWings.Compiler.Parsing;
 
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using RazorWings.Compiler.Models;
 
-/// <summary>
-/// Utility for parsing .razor files and extracting component metadata.
-/// </summary>
+/// <summary>Parses the supported Razor subset and extracts component metadata.</summary>
 public class RazorParsingUtility
 {
-    /// <summary>
-    /// Parses a .razor file and extracts component model.
-    /// </summary>
-    /// <param name="razorFilePath">Path to the .razor file.</param>
-    /// <param name="razorContent">Content of the .razor file.</param>
-    /// <returns>Parsed ComponentModel.</returns>
     public ComponentModel ParseRazorFile(string razorFilePath, string razorContent)
     {
-        var componentModel = new ComponentModel
-        {
+        var model = new ComponentModel {
             SourcePath = razorFilePath,
             Name = Path.GetFileNameWithoutExtension(razorFilePath)
         };
 
         try
         {
-            // Split into @code block and markup
-            var (codeBlock, markup) = SplitRazorContent(razorContent);
+            var (code, markup) = SplitRazorContent(razorContent);
+            model.CodeBlockContent = code;
+            model.MarkupContent = markup;
 
-            componentModel.CodeBlockContent = codeBlock;
-            componentModel.MarkupContent = markup;
-
-            // Extract state variables from @code block
-            if (!string.IsNullOrEmpty(codeBlock))
+            if (!string.IsNullOrWhiteSpace(code))
             {
-                ExtractStateVariables(codeBlock, componentModel);
-                ExtractEventHandlers(codeBlock, componentModel);
+                var root = ParseCode(code);
+                ExtractStateVariables(root, model);
+                ExtractEventHandlers(root, model);
+                ExtractParameters(root, model);
             }
 
-            // Extract bindings from markup
-            if (!string.IsNullOrEmpty(markup))
+            if (!string.IsNullOrWhiteSpace(markup))
             {
-                ExtractMarkupBindings(markup, componentModel);
+                model.MarkupNodes = new MarkupTreeParser(markup).Parse();
+                ExtractMarkupBindings(markup, model);
             }
 
-            // Build state-to-selectors mapping
-            BuildStateToSelectorsMap(componentModel);
-
-            componentModel.IsValid = true;
+            BuildStateToSelectorsMap(model);
+            model.IsValid = true;
         }
         catch (Exception ex)
         {
-            componentModel.Errors.Add($"Parse error: {ex.Message}");
-            componentModel.IsValid = false;
+            model.Errors.Add($"Parse error: {ex.Message}");
+            model.IsValid = false;
         }
-
-        return componentModel;
+        return model;
     }
 
-    /// <summary>
-    /// Splits .razor content into @code block and markup sections.
-    /// </summary>
-    private (string CodeBlock, string Markup) SplitRazorContent(string razorContent)
+    private static (string CodeBlock, string Markup) SplitRazorContent(string content)
     {
-        const string codeBlockPattern = @"@code\s*\{((?:[^{}]|(?<c>\{)|(?<-c>\}))*)\}";
-        var match = Regex.Match(razorContent, codeBlockPattern, RegexOptions.Singleline);
-
-        if (match.Success)
-        {
-            var codeBlock = match.Groups[1].Value;
-            var markup = Regex.Replace(razorContent, codeBlockPattern, "", RegexOptions.Singleline).Trim();
-            return (codeBlock, markup);
-        }
-
-        return ("", razorContent);
+        var start = content.IndexOf("@code", StringComparison.Ordinal);
+        if (start < 0) return ("", content);
+        var open = content.IndexOf('{', start);
+        if (open < 0) return ("", content);
+        var close = FindMatchingBrace(content, open);
+        if (close < 0) return ("", content);
+        return (content[(open + 1)..close], (content[..start] + content[(close + 1)..]).Trim());
     }
 
-    /// <summary>
-    /// Extracts state variables (fields/properties) from the @code block.
-    /// </summary>
-    private void ExtractStateVariables(string codeBlock, ComponentModel model)
+    private static int FindMatchingBrace(string text, int open)
     {
-        try
+        var depth = 0;
+        char quote = '\0';
+        for (var i = open; i < text.Length; i++)
         {
-            // Wrap code block in a temporary class for Roslyn parsing
-            var wrappedCode = $"class _Temp {{ {codeBlock} }}";
-            var tree = CSharpSyntaxTree.ParseText(wrappedCode);
-            var root = tree.GetRoot() as CompilationUnitSyntax;
-
-            if (root == null) return;
-
-            var fieldDeclarations = root.DescendantNodes().OfType<FieldDeclarationSyntax>();
-            var propertyDeclarations = root.DescendantNodes().OfType<PropertyDeclarationSyntax>();
-
-            int lineNum = 1;
-
-            // Process field declarations
-            foreach (var fieldDecl in fieldDeclarations)
+            var c = text[i];
+            if (quote != '\0')
             {
-                var typeStr = fieldDecl.Declaration.Type.ToString();
-                var accessMod = GetAccessModifier(fieldDecl.Modifiers);
-
-                foreach (var variable in fieldDecl.Declaration.Variables)
-                {
-                    var stateVar = new StateVariable
-                    {
-                        Name = variable.Identifier.Text,
-                        Type = typeStr,
-                        InitialValue = variable.Initializer?.Value.ToString(),
-                        AccessModifier = accessMod,
-                        LineNumber = lineNum
-                    };
-                    model.StateVariables.Add(stateVar);
-                }
-                lineNum++;
+                if (c == '\\') i++;
+                else if (c == quote) quote = '\0';
+                continue;
             }
-
-            // Process property declarations
-            foreach (var propDecl in propertyDeclarations)
-            {
-                var typeStr = propDecl.Type.ToString();
-                var accessMod = GetAccessModifier(propDecl.Modifiers);
-
-                var stateVar = new StateVariable
-                {
-                    Name = propDecl.Identifier.Text,
-                    Type = typeStr,
-                    InitialValue = propDecl.Initializer?.Value.ToString(),
-                    AccessModifier = accessMod,
-                    LineNumber = lineNum
-                };
-                model.StateVariables.Add(stateVar);
-                lineNum++;
-            }
+            if (c is '"' or '\'') { quote = c; continue; }
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0) return i;
         }
-        catch (Exception ex)
-        {
-            model.Errors.Add($"Error extracting state variables: {ex.Message}");
-        }
+        return -1;
     }
 
-    /// <summary>
-    /// Extracts event handler methods from the @code block.
-    /// </summary>
-    private void ExtractEventHandlers(string codeBlock, ComponentModel model)
+    private static CompilationUnitSyntax ParseCode(string code) =>
+        CSharpSyntaxTree.ParseText($"class _Temp {{ {code} }}").GetCompilationUnitRoot();
+
+    private static void ExtractStateVariables(CompilationUnitSyntax root, ComponentModel model)
     {
-        try
+        foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>())
+            foreach (var variable in field.Declaration.Variables)
+                model.StateVariables.Add(new StateVariable {
+                    Name = variable.Identifier.Text, Type = field.Declaration.Type.ToString(),
+                    InitialValue = variable.Initializer?.Value.ToString(),
+                    AccessModifier = GetAccessModifier(field.Modifiers),
+                    LineNumber = Line(field)
+                });
+
+        foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+            model.StateVariables.Add(new StateVariable {
+                Name = property.Identifier.Text, Type = property.Type.ToString(),
+                InitialValue = property.Initializer?.Value.ToString(),
+                AccessModifier = GetAccessModifier(property.Modifiers),
+                IsComputed = property.ExpressionBody is not null ||
+                    (property.AccessorList?.Accessors.Any(a => a.Kind() == SyntaxKind.GetAccessorDeclaration &&
+                        a.Body is not null) ?? false),
+                ComputedExpression = property.ExpressionBody?.Expression.ToString() ??
+                    property.AccessorList?.Accessors.FirstOrDefault(a => a.Kind() == SyntaxKind.GetAccessorDeclaration)?
+                        .Body?.ToString(),
+                LineNumber = Line(property)
+            });
+    }
+
+    private static void ExtractParameters(CompilationUnitSyntax root, ComponentModel model)
+    {
+        foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
         {
-            // Wrap code block in a temporary class for Roslyn parsing
-            var wrappedCode = $"class _Temp {{ {codeBlock} }}";
-            var tree = CSharpSyntaxTree.ParseText(wrappedCode);
-            var root = tree.GetRoot() as CompilationUnitSyntax;
+            if (!property.AttributeLists.SelectMany(x => x.Attributes)
+                .Any(a => a.Name.ToString() is "Parameter" or "ParameterAttribute"))
+                continue;
 
-            if (root == null) return;
-
-            var methodDeclarations = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
-
-            foreach (var methodDecl in methodDeclarations)
+            var type = property.Type.ToString();
+            var line = Line(property);
+            if (type.StartsWith("EventCallback", StringComparison.Ordinal))
             {
-                var handler = new EventHandler
-                {
-                    Name = methodDecl.Identifier.Text,
-                    ReturnType = methodDecl.ReturnType.ToString(),
-                    AccessModifier = GetAccessModifier(methodDecl.Modifiers),
-                    Body = methodDecl.Body?.ToString() ?? "",
-                    LineNumber = methodDecl.GetLocation().GetLineSpan().StartLinePosition.Line + 1
-                };
-
-                // Extract parameters
-                foreach (var param in methodDecl.ParameterList.Parameters)
-                {
-                    handler.Parameters.Add(new MethodParameter
-                    {
-                        Name = param.Identifier.Text,
-                        Type = param.Type?.ToString() ?? "object"
-                    });
-                }
-
-                // Analyze body for mutated state variables
-                AnalyzeMethodBodyForMutations(methodDecl.Body, handler, model);
-
-                model.EventHandlers.Add(handler);
+                model.EventCallbacks.Add(new ComponentEventCallback {
+                    Name = property.Identifier.Text, Type = type,
+                    CallbackArgumentType = ExtractGenericArgument(type),
+                    AccessModifier = GetAccessModifier(property.Modifiers), LineNumber = line
+                });
+            }
+            else
+            {
+                model.Parameters.Add(new ComponentParameter {
+                    Name = property.Identifier.Text, Type = type,
+                    DefaultValue = property.Initializer?.Value.ToString(),
+                    AccessModifier = GetAccessModifier(property.Modifiers), LineNumber = line
+                });
             }
         }
-        catch (Exception ex)
+    }
+
+    private static string? ExtractGenericArgument(string type)
+    {
+        var start = type.IndexOf('<');
+        return start >= 0 && type.EndsWith('>') ? type[(start + 1)..^1].Trim() : null;
+    }
+
+    private static void ExtractEventHandlers(CompilationUnitSyntax root, ComponentModel model)
+    {
+        foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
         {
-            model.Errors.Add($"Error extracting event handlers: {ex.Message}");
+            var handler = new EventHandler {
+                Name = method.Identifier.Text, ReturnType = method.ReturnType.ToString(),
+                AccessModifier = GetAccessModifier(method.Modifiers),
+                Body = method.Body?.ToString() ?? method.ExpressionBody?.ToString() ?? "",
+                LineNumber = Line(method)
+            };
+            foreach (var parameter in method.ParameterList.Parameters)
+                handler.Parameters.Add(new MethodParameter {
+                    Name = parameter.Identifier.Text, Type = parameter.Type?.ToString() ?? "object"
+                });
+            AnalyzeMethodBodyForMutations(method.Body, handler, model);
+            model.EventHandlers.Add(handler);
         }
     }
 
-    /// <summary>
-    /// Analyzes method body to identify mutated state variables.
-    /// </summary>
-    private void AnalyzeMethodBodyForMutations(BlockSyntax? body, EventHandler handler, ComponentModel model)
+    private static void AnalyzeMethodBodyForMutations(BlockSyntax? body, EventHandler handler, ComponentModel model)
     {
         if (body == null) return;
-
-        var postfixUnaryOps = body.DescendantNodes().OfType<PostfixUnaryExpressionSyntax>();
-        var prefixUnaryOps = body.DescendantNodes().OfType<PrefixUnaryExpressionSyntax>();
-        var assignments = body.DescendantNodes().OfType<AssignmentExpressionSyntax>();
-
-        // Handle count++, count--
-        foreach (var postfixOp in postfixUnaryOps)
+        foreach (var expression in body.DescendantNodes().OfType<ExpressionSyntax>())
         {
-            if (postfixOp.Operand is IdentifierNameSyntax id)
-            {
-                var varName = id.Identifier.Text;
-                if (model.StateVariables.Any(s => s.Name == varName) && !handler.MutatedVariables.Contains(varName))
-                {
-                    handler.MutatedVariables.Add(varName);
-                }
-            }
-        }
-
-        foreach (var prefixOp in prefixUnaryOps)
-        {
-            if (prefixOp.Operand is IdentifierNameSyntax id)
-            {
-                var varName = id.Identifier.Text;
-                if (model.StateVariables.Any(s => s.Name == varName) && !handler.MutatedVariables.Contains(varName))
-                {
-                    handler.MutatedVariables.Add(varName);
-                }
-            }
-        }
-
-        // Handle count = value, count += 1, etc.
-        foreach (var assignment in assignments)
-        {
-            if (assignment.Left is IdentifierNameSyntax id)
-            {
-                var varName = id.Identifier.Text;
-                if (model.StateVariables.Any(s => s.Name == varName) && !handler.MutatedVariables.Contains(varName))
-                {
-                    handler.MutatedVariables.Add(varName);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Extracts markup bindings (data and event bindings) from the HTML markup.
-    /// </summary>
-    private void ExtractMarkupBindings(string markup, ComponentModel model)
-    {
-        // Extract @variable data bindings (e.g., @count)
-        var dataBindingPattern = @"@(\w+)";
-        var dataBindings = Regex.Matches(markup, dataBindingPattern);
-
-        foreach (Match match in dataBindings)
-        {
-            var varName = match.Groups[1].Value;
-            if (model.StateVariables.Any(s => s.Name == varName))
-            {
-                var binding = new MarkupBinding
-                {
-                    Type = BindingType.DataBinding,
-                    Expression = varName,
-                    AttributeName = "textContent",
-                    LineNumber = GetLineNumber(markup, match.Index)
-                };
-                model.Bindings.Add(binding);
-            }
-        }
-
-        // Extract @onclick="Increment" event bindings
-        var eventPattern = @"@?(onclick|onchange|onsubmit|onkeyup)\s*=\s*[""']([^""']+)[""']";
-        var eventBindings = Regex.Matches(markup, eventPattern);
-
-        foreach (Match match in eventBindings)
-        {
-            var eventName = match.Groups[1].Value;
-            var handlerName = match.Groups[2].Value.Trim().TrimStart('@');
-
-            var binding = new MarkupBinding
-            {
-                Type = BindingType.EventBinding,
-                Expression = handlerName,
-                AttributeName = eventName,
-                IsCallback = true,
-                LineNumber = GetLineNumber(markup, match.Index)
+            var name = expression switch {
+                AssignmentExpressionSyntax a when a.Left is IdentifierNameSyntax id => id.Identifier.Text,
+                PostfixUnaryExpressionSyntax p when p.Operand is IdentifierNameSyntax id => id.Identifier.Text,
+                PrefixUnaryExpressionSyntax p when p.Operand is IdentifierNameSyntax id => id.Identifier.Text,
+                _ => null
             };
-            model.Bindings.Add(binding);
+            if (name != null && model.StateVariables.Any(s => s.Name == name))
+                handler.MutatedVariables.Add(name);
         }
     }
 
-    /// <summary>
-    /// Builds a mapping from state variables to the DOM selectors that render them.
-    /// </summary>
-    private void BuildStateToSelectorsMap(ComponentModel model)
+    private static void ExtractMarkupBindings(string markup, ComponentModel model)
+    {
+        foreach (Match match in Regex.Matches(markup, @"@(?<expr>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\([^)]*\))*)"))
+        {
+            var expression = match.Groups["expr"].Value;
+            if (expression is "if" or "else" or "foreach" or "code" ||
+                !model.StateVariables.Any(s => expression == s.Name || expression.StartsWith(s.Name + ".", StringComparison.Ordinal)))
+                continue;
+            model.Bindings.Add(new MarkupBinding {
+                Type = BindingType.DataBinding, Expression = expression, AttributeName = "textContent",
+                LineNumber = GetLineNumber(markup, match.Index)
+            });
+        }
+
+        var eventPattern = @"(?<name>@?on[a-zA-Z]+)\s*=\s*[""'](?<value>[^""']*)[""']";
+        foreach (Match match in Regex.Matches(markup, eventPattern))
+        {
+            var name = match.Groups["name"].Value.TrimStart('@');
+            var value = match.Groups["value"].Value.Trim().TrimStart('@');
+            model.Bindings.Add(new MarkupBinding {
+                Type = BindingType.EventBinding, Expression = value, AttributeName = name,
+                IsCallback = true, LineNumber = GetLineNumber(markup, match.Index)
+            });
+        }
+    }
+
+    private static void BuildStateToSelectorsMap(ComponentModel model)
     {
         foreach (var variable in model.StateVariables)
         {
-            var selectors = new HashSet<string>();
-
-            // Find all bindings that use this variable and infer the containing HTML element.
-            foreach (var binding in model.Bindings)
-            {
-                if (binding.Type == BindingType.DataBinding && binding.Expression == variable.Name)
-                {
-                    var selector = InferElementSelector(model.MarkupContent, variable.Name);
-                    selectors.Add(selector);
-                }
-            }
-
-            if (selectors.Count > 0)
-            {
-                model.StateToSelectorsMap[variable.Name] = selectors;
-            }
+            var selectors = model.Bindings.Where(b => b.Type == BindingType.DataBinding &&
+                    (b.Expression == variable.Name || b.Expression.StartsWith(variable.Name + ".", StringComparison.Ordinal)))
+                .Select(b => InferElementSelector(model.MarkupContent, variable.Name))
+                .ToHashSet();
+            if (selectors.Count > 0) model.StateToSelectorsMap[variable.Name] = selectors;
         }
     }
 
-    private string InferElementSelector(string markup, string variableName)
+    private static string InferElementSelector(string markup, string variable)
     {
-        var match = Regex.Match(
-            markup,
-            $@"<(?<tag>[A-Za-z][\w-]*)\b[^>]*>[^<]*@{Regex.Escape(variableName)}\b",
+        var match = Regex.Match(markup, $@"<(?<tag>[A-Za-z][\w-]*)\b[^>]*>[^<]*@{Regex.Escape(variable)}\b",
             RegexOptions.Singleline);
-
-        return match.Success ? match.Groups["tag"].Value : $"[data-bind-{variableName}]";
+        return match.Success ? match.Groups["tag"].Value : $"[data-bind-{variable}]";
     }
 
-    /// <summary>
-    /// Gets the access modifier string (private, public, protected, internal).
-    /// </summary>
-    private string GetAccessModifier(SyntaxTokenList modifiers)
-    {
-        if (modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword)))
-            return "public";
-        if (modifiers.Any(m => m.IsKind(SyntaxKind.ProtectedKeyword)))
-            return "protected";
-        if (modifiers.Any(m => m.IsKind(SyntaxKind.InternalKeyword)))
-            return "internal";
+    private static string GetAccessModifier(SyntaxTokenList modifiers) =>
+        modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword)) ? "public" :
+        modifiers.Any(m => m.IsKind(SyntaxKind.ProtectedKeyword)) ? "protected" :
+        modifiers.Any(m => m.IsKind(SyntaxKind.InternalKeyword)) ? "internal" : "private";
 
-        return "private";
-    }
+    private static int Line(SyntaxNode node) => node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+    private static int GetLineNumber(string content, int index) => content[..index].Count(c => c == '\n') + 1;
 
-    /// <summary>
-    /// Calculates line number from string index.
-    /// </summary>
-    private int GetLineNumber(string content, int index)
+    private sealed class MarkupTreeParser
     {
-        return content.Substring(0, index).Count(c => c == '\n') + 1;
+        private readonly string _text;
+        private int _position;
+        public MarkupTreeParser(string text) => _text = text;
+        public List<RazorMarkupNode> Parse() => ParseNodes(null, false);
+
+        private List<RazorMarkupNode> ParseNodes(string? closingTag, bool stopAtBrace)
+        {
+            var nodes = new List<RazorMarkupNode>();
+            while (_position < _text.Length)
+            {
+                if (stopAtBrace && _position < _text.Length && _text[_position] == '}') { _position++; break; }
+                if (closingTag != null && StartsWith("</" + closingTag)) { ConsumeTag(); break; }
+                if (_position >= _text.Length) break;
+                if (_text[_position] == '<') { nodes.Add(ParseElement()); continue; }
+                if (_text[_position] == '@' && TryParseDirective(out var directive)) { nodes.Add(directive); continue; }
+                nodes.Add(ParseText());
+            }
+            return nodes;
+        }
+
+        private RazorMarkupNode ParseElement()
+        {
+            var start = _position;
+            var end = FindTagEnd(_position);
+            if (end < 0) return ParseText();
+            var raw = _text[(_position + 1)..end].Trim();
+            _position = end + 1;
+            if (raw.StartsWith("/")) return new RazorTextNode { Content = "<" + raw + ">" };
+            var selfClosing = raw.EndsWith("/");
+            if (selfClosing) raw = raw[..^1].TrimEnd();
+            var match = Regex.Match(raw, @"^(?<tag>[A-Za-z][\w:.-]*)");
+            if (!match.Success) return new RazorTextNode { Content = _text[start.._position] };
+            var tag = match.Groups["tag"].Value;
+            var node = char.IsUpper(tag[0]) ? new RazorComponentNode() : new RazorElementNode();
+            node.TagName = tag; node.IsSelfClosing = selfClosing; node.LineNumber = LineAt(start);
+            ParseAttributes(raw[match.Length..], node.Attributes);
+            if (!selfClosing && !IsVoidElement(tag))
+                node.Children.AddRange(ParseNodes(tag, false));
+            return node;
+        }
+
+        private bool TryParseDirective(out RazorMarkupNode node)
+        {
+            node = null!;
+            if (StartsWith("@if"))
+            {
+                var (header, body) = ParseBlock("@if");
+                var result = new RazorIfNode { Condition = header, LineNumber = LineAt(_position) };
+                result.Children.AddRange(new MarkupTreeParser(body).Parse());
+                var save = _position; SkipWhitespaceOnly();
+                if (StartsWith("@else"))
+                {
+                    var (_, elseBody) = ParseBlock("@else");
+                    result.ElseChildren.AddRange(new MarkupTreeParser(elseBody).Parse());
+                }
+                else _position = save;
+                node = result; return true;
+            }
+            if (StartsWith("@foreach"))
+            {
+                var (header, body) = ParseBlock("@foreach");
+                var parts = Regex.Match(header, @"^(?:var\s+)?(?<item>\w+)\s+in\s+(?<collection>.+)$");
+                var result = new RazorForEachNode { LineNumber = LineAt(_position) };
+                if (parts.Success) { result.IterationVariable = parts.Groups["item"].Value; result.CollectionExpression = parts.Groups["collection"].Value.Trim(); }
+                result.Children.AddRange(new MarkupTreeParser(body).Parse());
+                node = result; return true;
+            }
+            return false;
+        }
+
+        private (string Header, string Body) ParseBlock(string keyword)
+        {
+            _position += keyword.Length;
+            var open = _text.IndexOf('{', _position);
+            if (open < 0) return (_text[_position..].Trim(), "");
+            var header = _text[_position..open].Trim().Trim('(', ')');
+            var close = FindMatchingBrace(_text, open);
+            if (close < 0) close = _text.Length - 1;
+            var body = _text[(open + 1)..close];
+            _position = Math.Min(close + 1, _text.Length);
+            return (header, body);
+        }
+
+        private RazorTextNode ParseText()
+        {
+            var start = _position;
+            if (_position < _text.Length && _text[_position] == '@')
+            {
+                _position++;
+                while (_position < _text.Length &&
+                       (char.IsLetterOrDigit(_text[_position]) || _text[_position] is '_' or '.' or '(' or ')' or ',' or ' ' or '='))
+                {
+                    if (_text[_position] == '(')
+                    {
+                        var depth = 1;
+                        _position++;
+                        while (_position < _text.Length && depth > 0)
+                        {
+                            if (_text[_position] == '(') depth++;
+                            else if (_text[_position] == ')') depth--;
+                            _position++;
+                        }
+                        continue;
+                    }
+                    _position++;
+                }
+                return new RazorTextNode { Content = _text[start.._position], LineNumber = LineAt(start) };
+            }
+            while (_position < _text.Length && _text[_position] != '<' && _text[_position] != '@') _position++;
+            return new RazorTextNode { Content = _text[start.._position], LineNumber = LineAt(start) };
+        }
+
+        private void ParseAttributes(string text, List<RazorAttribute> attributes)
+        {
+            foreach (Match match in Regex.Matches(text, @"(?<name>[-:@\w.]+)(?:\s*=\s*(?:""(?<double>[^""]*)""|'(?<single>[^']*)'|(?<bare>[^\s]+)))?"))
+            {
+                var value = match.Groups["double"].Success ? match.Groups["double"].Value :
+                    match.Groups["single"].Success ? match.Groups["single"].Value :
+                    match.Groups["bare"].Success ? match.Groups["bare"].Value : null;
+                value = value?.TrimStart('@');
+                attributes.Add(new RazorAttribute {
+                    Name = match.Groups["name"].Value, Value = value,
+                    IsExpression = value != null && (match.Groups["double"].Value.StartsWith("@") ||
+                        match.Groups["single"].Value.StartsWith("@") || match.Groups["bare"].Value.StartsWith("@"))
+                });
+            }
+        }
+
+        private int FindTagEnd(int start)
+        {
+            char quote = '\0';
+            for (var i = start; i < _text.Length; i++)
+            {
+                if (quote != '\0') { if (_text[i] == quote) quote = '\0'; continue; }
+                if (_text[i] is '"' or '\'') quote = _text[i];
+                else if (_text[i] == '>') return i;
+            }
+            return -1;
+        }
+        private void ConsumeTag() { var end = FindTagEnd(_position); _position = end < 0 ? _text.Length : end + 1; }
+        private bool StartsWith(string value) => _text.AsSpan(_position).StartsWith(value, StringComparison.Ordinal);
+        private void SkipWhitespaceOnly() { while (_position < _text.Length && char.IsWhiteSpace(_text[_position])) _position++; }
+        private int LineAt(int index) => _text[..Math.Min(index, _text.Length)].Count(c => c == '\n') + 1;
+        private static bool IsVoidElement(string tag) => tag is "area" or "base" or "br" or "col" or "embed" or "hr" or "img" or "input" or "link" or "meta" or "param" or "source" or "track" or "wbr";
     }
 }

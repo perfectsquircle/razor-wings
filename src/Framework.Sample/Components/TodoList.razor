@@ -1,0 +1,27 @@
+@code {
+    private List<string> items = new() { "Buy milk", "Walk dog" };
+    private string newItem = "";
+
+    private void Add()
+    {
+        if (!string.IsNullOrWhiteSpace(newItem))
+        {
+            items.Add(newItem);
+            newItem = "";
+        }
+    }
+
+    private void SetNewItem()
+    {
+        newItem = "";
+    }
+}
+
+<input value="@newItem" oninput="@SetNewItem" />
+<button onclick="@Add">Add</button>
+<ul>
+    @foreach (var item in items)
+    {
+        <li>@item</li>
+    }
+</ul>

@@ -32,10 +32,14 @@ public class ReactionGraphBuilder
             // 2. Build handler-to-mutations mapping from event handlers
             BuildHandlerToMutationsMapping(component, graph);
 
-            // 3. Build reverse state-to-handlers mapping
+            // 3. Build computed and structural dependency mappings
+            BuildComputedDependencies(component, graph);
+            BuildStructuralDependencies(component, graph);
+
+            // 4. Build reverse state-to-handlers mapping
             BuildStateToHandlersMapping(graph);
 
-            // 4. Determine state update order (topological sort)
+            // 5. Determine state update order (topological sort)
             ComputeStateUpdateOrder(component, graph);
 
             graph.IsValid = true;
@@ -47,6 +51,56 @@ public class ReactionGraphBuilder
         }
 
         return graph;
+    }
+
+    private static void BuildComputedDependencies(ComponentModel component, ReactionGraph graph)
+    {
+        foreach (var state in component.StateVariables.Where(s =>
+                     s.IsComputed && !string.IsNullOrWhiteSpace(s.ComputedExpression)))
+        {
+            var dependencies = component.StateVariables
+                .Where(candidate => !string.Equals(candidate.Name, state.Name, StringComparison.Ordinal) &&
+                    System.Text.RegularExpressions.Regex.IsMatch(
+                        state.ComputedExpression!,
+                        $@"\b{System.Text.RegularExpressions.Regex.Escape(candidate.Name)}\b"))
+                .Select(candidate => candidate.Name)
+                .ToHashSet(StringComparer.Ordinal);
+
+            state.Dependencies = dependencies;
+            graph.ComputedDependencies[state.Name] = dependencies;
+        }
+    }
+
+    private static void BuildStructuralDependencies(ComponentModel component, ReactionGraph graph)
+    {
+        foreach (var node in EnumerateNodes(component.MarkupNodes))
+        {
+            switch (node)
+            {
+                case RazorIfNode conditional:
+                    graph.StructuralDependencies[$"if:{conditional.LineNumber}"] = conditional.Condition;
+                    break;
+                case RazorForEachNode loop:
+                    graph.StructuralDependencies[$"foreach:{loop.LineNumber}"] = loop.CollectionExpression;
+                    break;
+            }
+        }
+    }
+
+    private static IEnumerable<RazorMarkupNode> EnumerateNodes(IEnumerable<RazorMarkupNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+            foreach (var child in EnumerateNodes(node.Children))
+                yield return child;
+
+            if (node is RazorIfNode conditional)
+            {
+                foreach (var child in EnumerateNodes(conditional.ElseChildren))
+                    yield return child;
+            }
+        }
     }
 
     /// <summary>

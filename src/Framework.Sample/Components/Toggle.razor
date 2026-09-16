@@ -1,0 +1,14 @@
+@code {
+    private bool isVisible = false;
+
+    private void ToggleVisibility()
+    {
+        isVisible = !isVisible;
+    }
+}
+
+<button onclick="@ToggleVisibility">Toggle</button>
+@if (isVisible)
+{
+    <p>Secret Message</p>
+}
